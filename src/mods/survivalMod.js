@@ -23,6 +23,20 @@ export const survivalMod = {
     const button = this.panel.querySelector('[data-action="rest"]')
     button.addEventListener('click', () => this.applyRest())
     context.hud.appendChild(this.panel)
+
+    this.statEls = {
+      hunger: this.panel.querySelector('[data-stat="hunger"]'),
+      stamina: this.panel.querySelector('[data-stat="stamina"]'),
+      focus: this.panel.querySelector('[data-stat="focus"]'),
+    }
+
+    this.customProgress = null
+    this.customProgressTimer = 0
+
+    context.registerSystem('survival', {
+      applyGather: (type) => this.handleGather(type),
+      getState: () => ({ ...this.state }),
+    })
   },
 
   update(context) {
@@ -35,17 +49,63 @@ export const survivalMod = {
       this.applyRest()
     }
 
-    this.panel.querySelector('[data-stat="hunger"]').textContent = this.state.hunger.toFixed(0)
-    this.panel.querySelector('[data-stat="stamina"]').textContent = this.state.stamina.toFixed(0)
-    this.panel.querySelector('[data-stat="focus"]').textContent = this.state.focus.toFixed(0)
+    this.renderStats()
+    this.refreshProgress(delta)
+  },
 
-    const message = this.state.hunger > 85 ? 'Need to forage soon.' : 'Status stable.'
-    this.context.progress.textContent = message
+  renderStats() {
+    this.statEls.hunger.textContent = this.state.hunger.toFixed(0)
+    this.statEls.stamina.textContent = this.state.stamina.toFixed(0)
+    this.statEls.focus.textContent = this.state.focus.toFixed(0)
+  },
+
+  refreshProgress(delta) {
+    if (this.customProgress) {
+      this.customProgressTimer -= delta
+      if (this.customProgressTimer > 0) {
+        this.context.progress.textContent = this.customProgress
+        return
+      }
+      this.customProgress = null
+    }
+    this.context.progress.textContent = this.getStatusMessage()
+  },
+
+  getStatusMessage() {
+    if (this.state.hunger > 85) {
+      return 'Need to forage soon.'
+    }
+    if (this.state.stamina < 25) {
+      return 'Energy running low.'
+    }
+    return 'Status stable.'
+  },
+
+  handleGather(type) {
+    if (type === 'wood') {
+      this.state.hunger = Math.max(0, this.state.hunger - 6)
+      this.state.focus = Math.min(100, this.state.focus + 5)
+      this.setProgressMessage('Gathered timber. Hunger eased.', 3)
+    } else if (type === 'stone') {
+      this.state.stamina = Math.min(100, this.state.stamina + 5)
+      this.state.focus = Math.max(0, this.state.focus - 3)
+      this.setProgressMessage('Stone hauled in. Endurance boosted.', 3)
+    } else {
+      this.setProgressMessage('Collected something unknown.', 2)
+    }
+    this.renderStats()
   },
 
   applyRest() {
     this.state.stamina = Math.min(100, this.state.stamina + 25)
     this.state.focus = Math.min(100, this.state.focus + 15)
-    this.context.progress.textContent = 'Resting restored stamina.'
+    this.setProgressMessage('Resting restored stamina.', 3)
+    this.renderStats()
+  },
+
+  setProgressMessage(message, duration = 2) {
+    this.customProgress = message
+    this.customProgressTimer = duration
+    this.context.progress.textContent = message
   },
 }
